@@ -12,15 +12,16 @@ from ..errors import ErrorHandler, ClientError, ClientConnectionError
 from ..http import MultipartFormDataEncoder
 from ..utils import (
     max_chunk_count_generator, max_chunk_size_generator,
-    get_file_size
+    get_file_size, valid_url_syntax
 )
 from ..compatpatch import ClientCompatPatch
 from .common import ClientDeprecationWarning
 from .common import MediaTypes
 from socket import timeout, error as SocketError
 from ssl import SSLError
+
 try:
-    ConnectionError = ConnectionError       # pylint: disable=redefined-builtin
+    ConnectionError = ConnectionError  # pylint: disable=redefined-builtin
 except NameError:  # Python 2:
     class ConnectionError(Exception):
         pass
@@ -282,7 +283,7 @@ class UploadEndpointsMixin(object):
             ClientCompatPatch.media(res.get('media'), drop_incompat_keys=self.drop_incompat_keys)
         return res
 
-    def configure_to_reel(self, upload_id, size):
+    def configure_to_reel(self, upload_id, size, external_metadata: dict):
         """
         Finalises a photo story upload. This should not be called directly.
         Use :meth:`post_photo_story` instead.
@@ -302,7 +303,7 @@ class UploadEndpointsMixin(object):
             'story_media_creation_date': str(int(time.time()) - randint(11, 20)),
             'client_shared_at': str(int(time.time()) - randint(3, 10)),
             'client_timestamp': str(int(time.time())),
-            'configure_mode': 1,      # 1 - REEL_SHARE, 2 - DIRECT_STORY_SHARE
+            'configure_mode': 1,  # 1 - REEL_SHARE, 2 - DIRECT_STORY_SHARE
             'device': {
                 'manufacturer': self.phone_manufacturer,
                 'model': self.phone_device,
@@ -319,6 +320,43 @@ class UploadEndpointsMixin(object):
                 'source_height': height,
             }
         }
+
+        if 'link' in external_metadata and valid_url_syntax(external_metadata['link']):
+            story_cta = '[{"links":[{"linkType": 1, "webUri":{0}, "androidClass": "", "package": "", "deeplinkUri": "", "callToActionTitle": "", "redirectUri": null, "leadGenFormId": "", "igUserId": "", "appInstallObjectiveInvalidationBehavior": null}]}]'.format(json.dumps(external_metadata['link']))
+            params['story_cta'] = story_cta
+
+        if 'hashtags' in external_metadata and 'caption' in external_metadata:
+            params['story_hashtags'] = json.dumps(external_metadata['hashtags'])
+            params['caption'] = external_metadata['caption']
+            params['mas_opt_in'] = 'NOT_PROMPTED'
+
+        if 'location_sticker' in external_metadata and 'location' in external_metadata:
+            params['story_locations'] = json.dumps(external_metadata['location_sticker'])
+            params['mas_opt_in'] = 'NOT_PROMPTED'
+
+        if 'story_mentions' in external_metadata and 'caption' in external_metadata:
+            params['reel_mentions'] = json.dumps(external_metadata['story_mentions'])
+            caption = external_metadata['caption']
+            params['caption'] = caption.replace(' ', '+') + '+'
+            params['mas_opt_in'] = 'NOT_PROMPTED'
+
+        if 'story_polls' in external_metadata:
+            params['story_polls'] = json.dumps(external_metadata['story_polls'])
+            params['internal_features'] = 'polling_sticker'
+            params['mas_opt_in'] = 'NOT_PROMPTED'
+
+        if 'story_sliders' in external_metadata:
+            params['story_sliders'] = json.dumps(external_metadata['story_sliders'])
+            params['story_sticker_ids'] = 'emoji_slider_' + params['story_sliders'][0]['emoji']
+
+        if 'story_questions' in external_metadata:
+            params['story_questions'] = json.dumps(external_metadata['story_questions'])
+            params['story_sticker_ids'] = 'question_sticker_ama'
+
+        if 'story_countdowns' in external_metadata:
+            params['story_countdowns'] = json.dumps(external_metadata['story_countdowns'])
+            params['story_sticker_ids'] = 'countdown_sticker_time'
+
         params.update(self.authenticated_params)
         res = self._call_api(endpoint, params=params)
         if self.auto_patch and res.get('media'):
@@ -348,7 +386,7 @@ class UploadEndpointsMixin(object):
             'story_media_creation_date': str(int(time.time()) - randint(11, 20)),
             'client_shared_at': str(int(time.time()) - randint(3, 10)),
             'client_timestamp': str(int(time.time())),
-            'configure_mode': 1,      # 1 - REEL_SHARE, 2 - DIRECT_STORY_SHARE
+            'configure_mode': 1,  # 1 - REEL_SHARE, 2 - DIRECT_STORY_SHARE
             'poster_frame_index': 0,
             'length': duration * 1.0,
             'audio_muted': False,
@@ -377,7 +415,7 @@ class UploadEndpointsMixin(object):
             ClientCompatPatch.media(res.get('media'), drop_incompat_keys=self.drop_incompat_keys)
         return res
 
-    def post_photo(self, photo_data, size, caption='', upload_id=None, to_reel=False, **kwargs):
+    def post_photo(self, photo_data, size, caption='', upload_id=None, to_reel=False, reel_sicker_metadata=None, **kwargs):
         """
         Upload a photo.
 
@@ -388,12 +426,15 @@ class UploadEndpointsMixin(object):
         :param caption:
         :param upload_id:
         :param to_reel: a Story photo
+        :param reel_sicker_metadata: Sticker Metadata (Only for Stories)
         :param kwargs:
             - **location**: a dict of venue/location information, from :meth:`location_search`
               or :meth:`location_fb_search`
             - **disable_comments**: bool to disable comments
         :return:
         """
+        if reel_sicker_metadata is None:
+            reel_sicker_metadata = {}
         warnings.warn('This endpoint has not been fully tested.', UserWarning)
 
         # if upload_id is provided, it's a thumbnail for a vid upload
@@ -449,7 +490,7 @@ class UploadEndpointsMixin(object):
             self.logger.debug('RESPONSE: {0:d} {1!s}'.format(e.code, error_response))
             ErrorHandler.process(e, error_response)
         except (SSLError, timeout, SocketError,
-                compat_urllib_error.URLError,   # URLError is base of HTTPError
+                compat_urllib_error.URLError,  # URLError is base of HTTPError
                 compat_http_client.HTTPException) as connection_error:
             raise ClientConnectionError('{} {}'.format(
                 connection_error.__class__.__name__, str(connection_error)))
@@ -470,7 +511,7 @@ class UploadEndpointsMixin(object):
         #     logger.debug('Skip photo configure.')
         #     return json_response
         if to_reel:
-            return self.configure_to_reel(upload_id, size)
+            return self.configure_to_reel(upload_id, size, reel_sicker_metadata)
         else:
             return self.configure(upload_id, size, caption=caption, location=location,
                                   disable_comments=disable_comments, is_sidecar=is_sidecar)
@@ -627,7 +668,7 @@ class UploadEndpointsMixin(object):
                         ErrorHandler.process(e, error_response)
 
                     except (SSLError, timeout, SocketError,
-                            compat_urllib_error.URLError,   # URLError is base of HTTPError
+                            compat_urllib_error.URLError,  # URLError is base of HTTPError
                             compat_http_client.HTTPException) as connection_error:
                         raise ClientConnectionError('{} {}'.format(
                             connection_error.__class__.__name__, str(connection_error)))

@@ -7,7 +7,6 @@ import os
 from datetime import datetime
 import re
 
-
 VALID_UUID_RE = r'^[a-f\d]{8}\-[a-f\d]{4}\-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$'
 
 
@@ -45,6 +44,7 @@ class Chunk(object):
     """
     Simple object class to encapulate an upload Chunk
     """
+
     def __init__(self, index, start, end, total):
         self.index = index
         self.start = start
@@ -76,6 +76,10 @@ def get_file_size(fp):
     file_len = fp.tell()
     fp.seek(original_file_position, os.SEEK_SET)
     return file_len
+
+
+def valid_url_syntax(url):
+    return re.compile("/^https?:\/\/[^\s.\/]+\.[^\s.\/]{2}\S*$/iu").match(url)
 
 
 def chunk_generator(chunk_count, chunk_size, file_data):
