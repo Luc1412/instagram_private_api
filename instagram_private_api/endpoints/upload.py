@@ -347,7 +347,7 @@ class UploadEndpointsMixin(object):
 
         if 'story_sliders' in external_metadata:
             params['story_sliders'] = json.dumps(external_metadata['story_sliders'])
-            params['story_sticker_ids'] = 'emoji_slider_' + params['story_sliders'][0]['emoji']
+            params['story_sticker_ids'] = 'emoji_slider_' + external_metadata['story_sliders'][0]['emoji']
 
         if 'story_questions' in external_metadata:
             params['story_questions'] = json.dumps(external_metadata['story_questions'])
