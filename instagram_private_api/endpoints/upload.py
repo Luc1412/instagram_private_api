@@ -357,6 +357,10 @@ class UploadEndpointsMixin(object):
             params['story_countdowns'] = json.dumps(external_metadata['story_countdowns'])
             params['story_sticker_ids'] = 'countdown_sticker_time'
 
+        if 'attached_media' in external_metadata:
+            params['attached_media'] = json.dumps(external_metadata['attached_media'])
+            params['story_sticker_ids'] = 'media_simple_' + params['attached_media'][0]['media_id']
+
         params.update(self.authenticated_params)
         res = self._call_api(endpoint, params=params)
         if self.auto_patch and res.get('media'):
