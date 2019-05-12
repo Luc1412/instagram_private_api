@@ -359,7 +359,7 @@ class UploadEndpointsMixin(object):
 
         if 'attached_media' in external_metadata:
             params['attached_media'] = json.dumps(external_metadata['attached_media'])
-            params['story_sticker_ids'] = 'media_simple_' + params['attached_media'][0]['media_id']
+            params['story_sticker_ids'] = 'media_simple_' + external_metadata['attached_media'][0]['media_id']
 
         params.update(self.authenticated_params)
         res = self._call_api(endpoint, params=params)
